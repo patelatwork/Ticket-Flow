@@ -4,6 +4,8 @@ FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
+# Every workspace manifest is needed for `npm ci` to accept the shared lockfile.
+COPY apps/web/package.json apps/web/
 RUN npm ci -w @ticketflow/api --include-workspace-root
 
 FROM deps AS build
@@ -15,6 +17,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
 RUN npm ci -w @ticketflow/api --omit=dev && npm cache clean --force
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/migrations apps/api/migrations

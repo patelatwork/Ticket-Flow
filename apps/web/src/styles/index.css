@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Only our tokens exist as utilities: Tailwind's default palette, sizes and fonts are removed,
+   so a stray `bg-red-500` or `text-[13px]` simply doesn't style anything. */
+@theme inline {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-wash: var(--accent-wash);
+  --color-go: var(--go);
+  --color-go-wash: var(--go-wash);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+
+  --text-xs: var(--fs-xs);
+  --text-sm: var(--fs-sm);
+  --text-base: var(--fs-base);
+  --text-lg: var(--fs-lg);
+  --text-xl: var(--fs-xl);
+  --text-2xl: var(--fs-2xl);
+  --text-3xl: var(--fs-3xl);
+
+  --spacing: var(--space);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  --container-content: var(--content);
+  --container-measure: var(--measure);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 100%;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Seat states: shape and pattern differ, not just color (WCAG 1.4.1). */
+@layer components {
+  .seat {
+    inline-size: var(--seat);
+    block-size: var(--seat);
+    border-radius: var(--radius-sm) var(--radius-sm) var(--radius-md) var(--radius-md);
+    border: var(--rule-width) solid currentColor;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+  .seat[data-state='AVAILABLE'] {
+    color: var(--go);
+    background: var(--go-wash);
+    cursor: pointer;
+  }
+  .seat[data-state='AVAILABLE']:hover {
+    background: var(--surface);
+  }
+  .seat[data-state='HELD'] {
+    color: var(--muted);
+    background: repeating-linear-gradient(135deg, var(--rule) 0 2px, var(--paper) 2px 6px);
+    cursor: not-allowed;
+  }
+  .seat[data-state='SOLD'] {
+    color: var(--muted);
+    background: var(--rule);
+    cursor: not-allowed;
+  }
+  .seat[data-state='SOLD']::after {
+    content: '';
+    position: absolute;
+    inset: 22% 22%;
+    background: linear-gradient(45deg, transparent 45%, currentColor 45% 55%, transparent 55%);
+  }
+  .seat[data-state='SELECTED'] {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: var(--accent-deep);
+    cursor: pointer;
+  }
+  .seat[data-state='CONFLICT'] {
+    color: var(--accent-deep);
+    background: var(--accent-wash);
+    border-style: dashed;
+    border-width: 2px;
+  }
+  .stage {
+    border-radius: 0 0 50% 50% / 0 0 100% 100%;
+  }
+}

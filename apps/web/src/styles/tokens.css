@@ -1,0 +1,51 @@
+/*
+ * The single source of design tokens. Components never use raw hex or px values; they use
+ * the Tailwind utilities generated from these variables (see index.css).
+ *
+ * Type pairing: Bricolage Grotesque (display) + Atkinson Hyperlegible (body, seat labels).
+ * Spacing: 8px scale (--space). Accents: magenta (action/selection) and teal (available).
+ */
+:root {
+  /* color */
+  --paper: #f6f6fa;
+  --surface: #ffffff;
+  --ink: #1c1e3b;
+  --ink-soft: #3b3e63;
+  --muted: #686c8c;
+  --rule: #d8d9e6;
+  --accent: #d6336c;        /* accent 1: selection, primary actions, urgency */
+  --accent-ink: #ffffff;
+  --accent-deep: #a8204f;   /* accent 1, darker: errors, pressed states */
+  --accent-wash: #fbe8ef;
+  --go: #17806d;            /* accent 2: available seats, success */
+  --go-wash: #e3f3ef;
+  --focus: #1c1e3b;
+
+  /* type */
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.625rem;
+  --fs-2xl: 2.25rem;
+  --fs-3xl: 3.25rem;
+
+  /* spacing: utilities are multiples of this (p-1 = 8px, p-2 = 16px, ...) */
+  --space: 0.5rem;
+
+  /* radii */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-pill: 999px;
+
+  /* sizes */
+  --seat: 2rem;
+  --seat-gap: 0.375rem;
+  --content: 72rem;
+  --measure: 40rem;
+  --rule-width: 1px;
+  --focus-width: 3px;
+}

@@ -4,9 +4,12 @@ import { withTransaction, type Queryable, type TxClient } from '../../db/tx.js';
 import { sha256Hex } from '../../lib/crypto.js';
 import { AppError, type ErrorBody } from '../../lib/errors.js';
 import type { HttpResult } from '../../lib/http.js';
+import { jobId } from '../../queues/definitions.js';
+import { addToOutbox } from '../../queues/outbox.js';
 import type { AuthUser } from '../auth/tokens.js';
 import { lockEvent } from '../events/events.repository.js';
 import * as idempotency from '../idempotency/idempotency.repository.js';
+import { publishSeatStatesAfterCommit } from '../live/seat-events.js';
 import { transitionBooking } from './booking-state.js';
 import * as repo from './bookings.repository.js';
 import type { CreateBookingBody } from './bookings.schemas.js';
@@ -60,7 +63,8 @@ export type CreateBookingResult = HttpResult<{ booking: BookingDto } | ErrorBody
  *  3. FOR UPDATE the seats in ascending id order (deadlock-free).
  *  4. Lazily expire lapsed holds on those seats; anything still active is a conflict.
  *  5. Insert the booking + booking_seats (the partial unique index is the final backstop).
- *  6. Store the response under the idempotency key.
+ *  6. Write the hold-expiry job to the outbox (delayed until hold_expires_at).
+ *  7. Store the response under the idempotency key.
  *
  * A 409 for unavailable seats is a *committed* outcome, stored and replayed like a 201.
  * Validation-type errors (unknown event/seats) roll back, so the key can be retried.
@@ -128,6 +132,9 @@ async function reserveSeats(
     holdSeconds: env.HOLD_TTL_SECONDS,
   });
   await repo.insertBookingSeats(tx, booking.id, eventId, seatIds);
+  // Same transaction as the booking: the expiry job exists iff the hold does.
+  await addToOutbox(tx, 'hold-expiry', { bookingId: booking.id }, { jobId: jobId('hold-expiry', booking.id), runAt: booking.holdExpiresAt });
+  publishSeatStatesAfterCommit(tx, eventId, seatIds.map((id) => ({ id, state: 'HELD' as const })));
   return { status: 201, replayed: false, body: { booking: await loadBookingDto(tx, booking.id) } };
 }
 

@@ -44,6 +44,24 @@ export async function setBookingSeatsActive(tx: TxClient, bookingId: string, act
   await tx.query(`UPDATE booking_seats SET is_active = $2 WHERE booking_id = $1 AND is_active <> $2`, [bookingId, active]);
 }
 
+export async function listBookingSeatIds(db: Queryable, bookingId: string): Promise<string[]> {
+  const { rows } = await db.query<{ seatId: string }>(
+    `SELECT seat_id AS "seatId" FROM booking_seats WHERE booking_id = $1 ORDER BY seat_id`,
+    [bookingId],
+  );
+  return rows.map((r) => r.seatId);
+}
+
+/** Locks several bookings in ascending id order (the global booking lock order). */
+export async function lockBookingsInOrder(tx: TxClient, ids: string[]): Promise<BookingRecord[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await tx.query<BookingRecord>(
+    `SELECT ${BOOKING_COLUMNS} FROM bookings WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`,
+    [ids],
+  );
+  return rows;
+}
+
 export async function insertHeldBooking(
   tx: TxClient,
   booking: { userId: string; eventId: string; totalPaise: number; idempotencyKey: string; holdSeconds: number },

@@ -5,3 +5,4 @@ coverage/
 .data/
 *.log
 .DS_Store
+load-tests/fixtures/

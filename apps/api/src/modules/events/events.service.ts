@@ -2,6 +2,9 @@ import { pool } from '../../db/pool.js';
 import { withTransaction } from '../../db/tx.js';
 import { AppError } from '../../lib/errors.js';
 import type { AuthUser } from '../auth/tokens.js';
+import { publishSeatMapRefreshAfterCommit } from '../live/seat-events.js';
+import { releaseEventBookings } from '../payments/payments.service.js';
+import { getSeatMapCache } from './seat-map-cache.js';
 import * as repo from './events.repository.js';
 import type { AddSeatsBody, CreateEventBody, ListEventsQuery, UpdateEventBody } from './events.schemas.js';
 
@@ -74,6 +77,7 @@ export async function updateEvent(user: AuthUser, id: string, patch: UpdateEvent
     if (event.status === 'CANCELLED') throw AppError.conflict('EVENT_CANCELLED', 'Cancelled events cannot be edited');
     const updated = await repo.updateEvent(tx, id, patch);
     if (!updated) throw AppError.notFound('Event');
+    publishSeatMapRefreshAfterCommit(tx, id);
     return toEventDto(updated);
   });
 }
@@ -85,20 +89,23 @@ export async function publishEvent(user: AuthUser, id: string): Promise<EventDto
     if (event.status !== 'DRAFT') throw AppError.conflict('INVALID_EVENT_STATUS', `Cannot publish a ${event.status} event`);
     if (event.startsAt.getTime() <= Date.now()) throw AppError.conflict('EVENT_IN_PAST', 'Cannot publish an event that has started');
     if ((await repo.countSeats(tx, id)) === 0) throw AppError.conflict('EVENT_HAS_NO_SEATS', 'Add seats before publishing');
+    publishSeatMapRefreshAfterCommit(tx, id);
     return toEventDto(await repo.setEventStatus(tx, id, 'PUBLISHED'));
   });
 }
 
+/**
+ * Cancels the event, cancelling HELD bookings and refunding PAID ones in the same
+ * transaction (refunds themselves run as outbox jobs).
+ */
 export async function cancelEvent(user: AuthUser, id: string): Promise<EventDto> {
   return withTransaction(async (tx) => {
-    // FOR UPDATE waits for in-flight bookings (which hold FOR SHARE) and blocks new ones.
+    // FOR UPDATE waits for in-flight bookings and captures (which hold FOR SHARE) and blocks new ones.
     const event = await repo.lockEvent(tx, id, 'update');
     assertCanManage(user, event);
     if (event.status === 'CANCELLED') throw AppError.conflict('INVALID_EVENT_STATUS', 'Event is already cancelled');
-    // Refunding paid bookings on cancellation arrives with payments (Phase 3).
-    if (await repo.hasActiveBookings(tx, id)) {
-      throw AppError.conflict('EVENT_HAS_ACTIVE_BOOKINGS', 'Event has held or paid bookings');
-    }
+    await releaseEventBookings(tx, id);
+    publishSeatMapRefreshAfterCommit(tx, id);
     return toEventDto(await repo.setEventStatus(tx, id, 'CANCELLED'));
   });
 }
@@ -124,6 +131,7 @@ export async function addSeats(user: AuthUser, eventId: string, input: AddSeatsB
     if (event.status === 'CANCELLED') throw AppError.conflict('EVENT_CANCELLED', 'Cannot add seats to a cancelled event');
     const seats = await repo.insertSeats(tx, eventId, input.seats);
     if (!seats) throw AppError.conflict('SEAT_LABEL_TAKEN', 'One or more seat labels already exist for this event');
+    publishSeatMapRefreshAfterCommit(tx, eventId);
     return seats.map(toSeatDto);
   });
 }
@@ -135,11 +143,27 @@ export async function deleteSeat(user: AuthUser, eventId: string, seatId: string
     const result = await repo.deleteSeat(tx, eventId, seatId);
     if (result === 'not_found') throw AppError.notFound('Seat');
     if (result === 'has_bookings') throw AppError.conflict('SEAT_HAS_BOOKINGS', 'Seats with booking history cannot be deleted');
+    publishSeatMapRefreshAfterCommit(tx, eventId);
   });
 }
 
-export async function getSeatMap(eventId: string, viewer: AuthUser | undefined): Promise<{ event: EventDto; seats: SeatMapSeatDto[] }> {
+export interface SeatMapDto {
+  event: EventDto;
+  seats: SeatMapSeatDto[];
+}
+
+/**
+ * The public seat map of a PUBLISHED event is served from cache (short TTL, invalidated
+ * on every seat state change). Organizers previewing drafts always read through.
+ */
+export async function getSeatMap(eventId: string, viewer: AuthUser | undefined): Promise<SeatMapDto> {
+  const cache = getSeatMapCache();
+  const cached = await cache.get(eventId);
+  if (cached.value) return cached.value;
+
   const event = await findVisibleEvent(eventId, viewer);
   const seats = await repo.seatMap(pool, eventId);
-  return { event: toEventDto(event), seats: seats.map((s) => ({ ...toSeatDto(s), state: s.state })) };
+  const dto: SeatMapDto = { event: toEventDto(event), seats: seats.map((s) => ({ ...toSeatDto(s), state: s.state })) };
+  if (event.status === 'PUBLISHED') await cache.set(eventId, dto, cached.generation);
+  return dto;
 }
