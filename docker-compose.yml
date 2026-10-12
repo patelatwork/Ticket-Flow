@@ -1,15 +1,42 @@
-# docker compose up            -> full stack
-# docker compose --profile test up -d postgres-test   -> throwaway DB for `TEST_DATABASE_URL=... npm test`
+# docker compose up --build                       -> full stack: http://localhost:8080
+# docker compose --profile observability up -d    -> + Prometheus (:9090) and Grafana (:3001)
+# docker compose --profile test up -d postgres-test redis-test   -> throwaway deps for `npm test`
 #
-# The worker (Phase 2), Mailpit (Phase 4) and web (Phase 5) services are added in their phases.
+# Ports: web 8080 · api 3000 (+ /docs, /admin/queues) · worker metrics 9100 · Mailpit UI 8025
+#        MinIO 9000 (console 9001)
 
-x-api-env: &api-env
+x-app-env: &app-env
   NODE_ENV: production
   LOG_LEVEL: info
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/ticketflow
+  REDIS_URL: redis://redis:6379
   JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-secret-change-me-0123456789abcdef}
   COOKIE_SECURE: "false"
+  TRUST_PROXY: "true"
   HOLD_TTL_SECONDS: "600"
+  # Demo secrets: override all of these for anything beyond a local demo.
+  ALLOW_DEV_SECRETS: "true"
+  MOCK_WEBHOOK_SECRET: ${MOCK_WEBHOOK_SECRET:-mock-webhook-secret-change-me}
+  TICKET_QR_SECRET: ${TICKET_QR_SECRET:-dev-only-qr-secret-change-me-0123456789abcdef}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+  MOCK_PAYMENT_WEBHOOK_DELAY_MS: ${MOCK_PAYMENT_WEBHOOK_DELAY_MS:-2000}
+  MOCK_PAYMENT_OUTCOME: ${MOCK_PAYMENT_OUTCOME:-success}
+  MOCK_PAYMENT_DUPLICATES: ${MOCK_PAYMENT_DUPLICATES:-0}
+  MOCK_PAYMENT_OUT_OF_ORDER: ${MOCK_PAYMENT_OUT_OF_ORDER:-false}
+  MOCK_PAYMENT_DROP_WEBHOOKS: ${MOCK_PAYMENT_DROP_WEBHOOKS:-false}
+  API_BASE_URL: http://api:3000
+  S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_ENDPOINT: http://localhost:9000
+  S3_BUCKET: tickets
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  WEB_BASE_URL: http://localhost:8080
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
 
 services:
   postgres:
@@ -18,6 +45,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ticketflow
+    command: ["postgres", "-c", "max_connections=200"]
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
@@ -28,7 +56,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    # AOF so delayed jobs (hold expiry) survive a Redis restart; noeviction is required by BullMQ.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     ports: ["6379:6379"]
     volumes: [redisdata:/data]
     healthcheck:
@@ -45,17 +74,26 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     ports: ["9000:9000", "9001:9001"]
     volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports: ["8025:8025", "1025:1025"]
 
   migrate:
     build: { context: ., dockerfile: apps/api/Dockerfile }
     command: ["node", "dist/src/db/migrate.js"]
-    environment: *api-env
+    environment: *app-env
     depends_on:
       postgres: { condition: service_healthy }
 
   api:
     build: { context: ., dockerfile: apps/api/Dockerfile }
-    environment: *api-env
+    environment: *app-env
     ports: ["3000:3000"]
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -65,6 +103,43 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Same image, different entrypoint: queues, outbox relay and schedulers scale separately.
+  worker:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["node", "dist/src/worker.js"]
+    environment: *app-env
+    ports: ["9100:9100"]
+    stop_grace_period: 35s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+      mailpit: { condition: service_started }
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    ports: ["8080:80"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.55.1
+    volumes: ["./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
 
   postgres-test:
     profiles: ["test"]
@@ -76,6 +151,12 @@ services:
     command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off", "-c", "max_connections=200"]
     ports: ["5433:5432"]
     tmpfs: [/var/lib/postgresql/data]
+
+  redis-test:
+    profiles: ["test"]
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    ports: ["6380:6379"]
 
 volumes:
   pgdata:

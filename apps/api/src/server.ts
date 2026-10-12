@@ -2,9 +2,12 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { closePool } from './db/pool.js';
 import { logger } from './lib/logger.js';
+import { closeAllSeatStreams } from './modules/live/live.routes.js';
+import { createRuntime } from './runtime.js';
 
-const server = createApp().listen(env.PORT, () => {
-  logger.info({ port: env.PORT, env: env.NODE_ENV }, 'api listening');
+const runtime = createRuntime({ subscriber: true });
+const server = createApp({ redis: runtime.redis, queues: runtime.queues }).listen(env.PORT, () => {
+  logger.info({ port: env.PORT, env: env.NODE_ENV, paymentProvider: env.PAYMENT_PROVIDER }, 'api listening');
 });
 
 // Keep-alive must outlive the load balancer's idle timeout to avoid 502s on reused sockets.
@@ -22,11 +25,14 @@ function shutdown(signal: string): void {
   }, 15_000);
   forceExit.unref();
 
+  // SSE streams never end on their own; close them so server.close() can finish.
+  // Clients reconnect (EventSource retry) to another instance and get a fresh snapshot.
+  closeAllSeatStreams();
   server.close((err) => {
     if (err) logger.error({ err }, 'error closing http server');
-    closePool()
-      .catch((poolErr: unknown) => {
-        logger.error({ err: poolErr }, 'error closing postgres pool');
+    void Promise.allSettled([runtime.close(), closePool()])
+      .then((results) => {
+        for (const r of results) if (r.status === 'rejected') logger.error({ err: r.reason as unknown }, 'error during shutdown');
       })
       .finally(() => {
         logger.info('shutdown complete');

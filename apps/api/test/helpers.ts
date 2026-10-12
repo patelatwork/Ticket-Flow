@@ -55,7 +55,8 @@ export function useTestServer(): { url: () => string } {
 
 export async function resetDb(): Promise<void> {
   await pool.query(
-    `TRUNCATE idempotency_keys, booking_seats, bookings, seats, events, refresh_tokens, users RESTART IDENTITY CASCADE`,
+    `TRUNCATE reports, notifications, tickets, payment_events, payments, outbox,
+              idempotency_keys, booking_seats, bookings, seats, events, refresh_tokens, users RESTART IDENTITY CASCADE`,
   );
 }
 
@@ -129,4 +130,43 @@ export function shuffle<T>(items: readonly T[]): T[] {
     [copy[i], copy[j]] = [copy[j] as T, copy[i] as T];
   }
   return copy;
+}
+
+/** Books seats through the real endpoint and returns the booking id. */
+export async function bookSeats(baseUrl: string, user: TestUser, eventId: string, seatIds: string[]): Promise<string> {
+  const res = await fetch(`${baseUrl}/bookings`, {
+    method: 'POST',
+    headers: { ...user.auth, 'content-type': 'application/json', 'idempotency-key': idemKey() },
+    body: JSON.stringify({ eventId, seatIds }),
+  });
+  const body = (await res.json()) as { booking?: { id: string } };
+  if (res.status !== 201 || !body.booking) throw new Error(`bookSeats failed: HTTP ${res.status} ${JSON.stringify(body)}`);
+  return body.booking.id;
+}
+
+/** Moves a hold's expiry into the past without waiting. */
+export async function lapseHold(bookingId: string): Promise<void> {
+  await pool.query(`UPDATE bookings SET hold_expires_at = now() - interval '1 second' WHERE id = $1`, [bookingId]);
+}
+
+export async function bookingStatus(bookingId: string): Promise<string | undefined> {
+  const { rows } = await pool.query<{ status: string }>(`SELECT status FROM bookings WHERE id = $1`, [bookingId]);
+  return rows[0]?.status;
+}
+
+export interface OutboxTestRow {
+  id: string;
+  topic: string;
+  jobId: string;
+  payload: Record<string, unknown>;
+  dispatchedAt: Date | null;
+}
+
+export async function outboxRows(topic?: string): Promise<OutboxTestRow[]> {
+  const { rows } = await pool.query<OutboxTestRow>(
+    `SELECT id::text, topic, job_id AS "jobId", payload, dispatched_at AS "dispatchedAt"
+       FROM outbox WHERE $1::text IS NULL OR topic = $1 ORDER BY id`,
+    [topic ?? null],
+  );
+  return rows;
 }

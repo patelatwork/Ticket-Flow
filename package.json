@@ -14,6 +14,11 @@
     "migrate": "npm run migrate -w @ticketflow/api",
     "seed": "npm run seed -w @ticketflow/api",
     "db:local": "npm run db:local -w @ticketflow/api",
-    "dev:api": "npm run dev -w @ticketflow/api"
+    "dev:api": "npm run dev -w @ticketflow/api",
+    "dev:worker": "npm run dev:worker -w @ticketflow/api",
+    "dev:web": "npm run dev -w @ticketflow/web",
+    "build": "npm run build --workspaces --if-present",
+    "seed:loadtest": "npm run seed:loadtest -w @ticketflow/api --",
+    "loadtest:verify": "npm run loadtest:verify -w @ticketflow/api --"
   }
 }

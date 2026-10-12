@@ -96,11 +96,6 @@ export async function listByOrganizer(db: Queryable, organizerId: string): Promi
   return rows;
 }
 
-export async function hasActiveBookings(db: Queryable, eventId: string): Promise<boolean> {
-  const { rows } = await db.query(`SELECT 1 FROM booking_seats WHERE event_id = $1 AND is_active LIMIT 1`, [eventId]);
-  return rows.length > 0;
-}
-
 // ---- seats ----
 
 export interface SeatRecord {
