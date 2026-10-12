@@ -27,8 +27,30 @@ let refreshing: Promise<string | null> | null = null;
 let clockOffsetMs = 0;
 const sessionListeners = new Set<(token: string | null) => void>();
 
+// A non-secret hint that this browser had a session, so anonymous visitors don't fire a
+// refresh call that can only 401. The refresh token itself stays in the httpOnly cookie.
+const SESSION_HINT = 'tf_had_session';
+
+export function hadSession(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT) === '1';
+  } catch {
+    return true; // storage unavailable: just try the refresh
+  }
+}
+
+function setSessionHint(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SESSION_HINT, '1');
+    else localStorage.removeItem(SESSION_HINT);
+  } catch {
+    // ignore: the hint is only an optimization
+  }
+}
+
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  setSessionHint(token !== null);
   for (const listener of sessionListeners) listener(token);
 }
 

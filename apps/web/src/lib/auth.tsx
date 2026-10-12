@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, onSessionChange, refreshSession, setAccessToken } from './api';
+import { api, hadSession, onSessionChange, refreshSession, setAccessToken } from './api';
 import type { User } from './types';
 
 export type SignupRole = 'attendee' | 'organizer';
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     // Restore the session from the httpOnly refresh cookie on page load.
     void (async () => {
-      const token = await refreshSession();
+      const token = hadSession() ? await refreshSession() : null;
       if (token && !cancelled) {
         try {
           const me = await api<{ user: User }>('/auth/me');

@@ -49,3 +49,11 @@
   --rule-width: 1px;
   --focus-width: 3px;
 }
+
+/* Narrow phones: a 10-seat row must fit in 375px without horizontal scrolling. */
+@media (max-width: 30rem) {
+  :root {
+    --seat: 1.625rem;
+    --seat-gap: 0.25rem;
+  }
+}
