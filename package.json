@@ -1,0 +1,19 @@
+{
+  "name": "ticketflow",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "migrate": "npm run migrate -w @ticketflow/api",
+    "seed": "npm run seed -w @ticketflow/api",
+    "db:local": "npm run db:local -w @ticketflow/api",
+    "dev:api": "npm run dev -w @ticketflow/api"
+  }
+}
