@@ -159,3 +159,93 @@ export async function getSalesSummary(user: AuthUser): Promise<{ events: EventSa
     })),
   };
 }
+
+export interface SalesDayDto {
+  date: string;
+  bookingsPaid: number;
+  ticketsSold: number;
+  grossPaise: number;
+}
+
+export interface TierSalesDto {
+  tier: string;
+  totalSeats: number;
+  seatsSold: number;
+  seatsHeld: number;
+  grossPaise: number;
+}
+
+export interface RecentSaleDto {
+  bookingId: string;
+  eventId: string;
+  eventTitle: string;
+  seats: number;
+  amountPaise: number;
+  paidAt: string;
+}
+
+/**
+ * Live analytics for the organizer dashboard: one row per UTC day for the last `days` days
+ * (zero-filled, so the client can chart it directly), seat sales per tier, and the latest
+ * settled payments. Admins see every organizer's events, matching getSalesSummary.
+ */
+export async function getSalesAnalytics(
+  user: AuthUser,
+  days: number,
+): Promise<{ days: number; timeline: SalesDayDto[]; tiers: TierSalesDto[]; recent: RecentSaleDto[] }> {
+  const scope = [user.id, user.role === 'admin'];
+  const timeline = await pool.query<{ date: string; bookingsPaid: number; ticketsSold: number; grossPaise: string }>(
+    `WITH sales AS (
+       SELECT (p.succeeded_at AT TIME ZONE 'UTC')::date AS day, p.amount_paise,
+              (SELECT count(*) FROM booking_seats bs WHERE bs.booking_id = b.id)::int AS seats
+         FROM payments p
+         JOIN bookings b ON b.id = p.booking_id
+         JOIN events e ON e.id = b.event_id
+        WHERE p.succeeded_at IS NOT NULL
+          AND p.succeeded_at >= (now() AT TIME ZONE 'UTC')::date - ($3::int - 1)
+          AND ($2 OR e.organizer_id = $1)
+     )
+     SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
+            count(s.day)::int AS "bookingsPaid",
+            COALESCE(sum(s.seats), 0)::int AS "ticketsSold",
+            COALESCE(sum(s.amount_paise), 0)::text AS "grossPaise"
+       FROM generate_series((now() AT TIME ZONE 'UTC')::date - ($3::int - 1), (now() AT TIME ZONE 'UTC')::date, interval '1 day') AS d(day)
+       LEFT JOIN sales s ON s.day = d.day
+      GROUP BY d.day
+      ORDER BY d.day`,
+    [...scope, days],
+  );
+  const tiers = await pool.query<{ tier: string; totalSeats: number; seatsSold: number; seatsHeld: number; grossPaise: string }>(
+    `SELECT s.tier,
+            count(*)::int AS "totalSeats",
+            count(*) FILTER (WHERE b.status = 'PAID')::int AS "seatsSold",
+            count(*) FILTER (WHERE b.status = 'HELD' AND b.hold_expires_at > now())::int AS "seatsHeld",
+            COALESCE(sum(s.price_paise) FILTER (WHERE b.status = 'PAID'), 0)::text AS "grossPaise"
+       FROM seats s
+       JOIN events e ON e.id = s.event_id
+       LEFT JOIN booking_seats bs ON bs.seat_id = s.id AND bs.is_active
+       LEFT JOIN bookings b ON b.id = bs.booking_id
+      WHERE $2 OR e.organizer_id = $1
+      GROUP BY s.tier
+      ORDER BY sum(s.price_paise) / count(*) DESC, s.tier`,
+    scope,
+  );
+  const recent = await pool.query<{ bookingId: string; eventId: string; eventTitle: string; seats: number; amountPaise: number; paidAt: Date }>(
+    `SELECT b.id AS "bookingId", e.id AS "eventId", e.title AS "eventTitle",
+            (SELECT count(*) FROM booking_seats bs WHERE bs.booking_id = b.id)::int AS seats,
+            p.amount_paise AS "amountPaise", p.succeeded_at AS "paidAt"
+       FROM payments p
+       JOIN bookings b ON b.id = p.booking_id
+       JOIN events e ON e.id = b.event_id
+      WHERE p.succeeded_at IS NOT NULL AND ($2 OR e.organizer_id = $1)
+      ORDER BY p.succeeded_at DESC
+      LIMIT 8`,
+    scope,
+  );
+  return {
+    days,
+    timeline: timeline.rows.map((d) => ({ ...d, grossPaise: Number(d.grossPaise) })),
+    tiers: tiers.rows.map((t) => ({ ...t, grossPaise: Number(t.grossPaise) })),
+    recent: recent.rows.map((r) => ({ ...r, paidAt: r.paidAt.toISOString() })),
+  };
+}

@@ -32,6 +32,7 @@
   --text-xl: var(--fs-xl);
   --text-2xl: var(--fs-2xl);
   --text-3xl: var(--fs-3xl);
+  --text-4xl: var(--fs-4xl);
 
   --spacing: var(--space);
 
@@ -126,5 +127,45 @@
   }
   .stage {
     border-radius: 0 0 50% 50% / 0 0 100% 100%;
+  }
+
+  /* Charts. "Held" is hatched everywhere (seat map and charts), so it never relies on color. */
+  .hatch {
+    background: repeating-linear-gradient(135deg, var(--rule) 0 2px, var(--paper) 2px 6px);
+  }
+  .hatch-accent {
+    background: repeating-linear-gradient(135deg, var(--accent) 0 2px, var(--accent-wash) 2px 6px);
+  }
+  .chart-plot {
+    block-size: var(--chart-h);
+  }
+  .chart-bar {
+    max-inline-size: var(--bar-max);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  }
+  .meter {
+    block-size: var(--meter-h);
+    gap: var(--mark-gap);
+  }
+  .meter > * {
+    border-radius: var(--radius-sm);
+  }
+
+  /* A ticket stub: notches cut into both long edges at the perforation. */
+  .stub {
+    --notch: calc(var(--space) * 1.5);
+    mask:
+      radial-gradient(circle at 0 var(--stub-at, 50%), transparent var(--notch), var(--ink) calc(var(--notch) + var(--rule-width))) left / 51% 100% no-repeat,
+      radial-gradient(circle at 100% var(--stub-at, 50%), transparent var(--notch), var(--ink) calc(var(--notch) + var(--rule-width))) right / 51% 100% no-repeat;
+  }
+
+  /* Landing seat demo: seats change state on a slow loop. Off under reduced motion (base layer). */
+  @keyframes seat-take {
+    0%, 55% { background: var(--go-wash); color: var(--go); }
+    60%, 80% { background: var(--accent); color: var(--accent-ink); border-color: var(--accent-deep); }
+    85%, 100% { background: var(--rule); color: var(--muted); }
+  }
+  .seat-demo {
+    animation: seat-take 9s ease-in-out infinite;
   }
 }

@@ -95,3 +95,13 @@ export interface DailyReport {
 export type SeatStreamMessage =
   | { type: 'seats'; eventId: string; seats: { id: string; state: SeatState }[]; at: string }
   | { type: 'refresh'; eventId: string; at: string };
+
+/** GET /organizer/analytics */
+export interface SalesAnalytics {
+  days: number;
+  /** One row per UTC day, oldest first, zero-filled. */
+  timeline: { date: string; bookingsPaid: number; ticketsSold: number; grossPaise: number }[];
+  /** Ordered most expensive tier first. */
+  tiers: { tier: string; totalSeats: number; seatsSold: number; seatsHeld: number; grossPaise: number }[];
+  recent: { bookingId: string; eventId: string; eventTitle: string; seats: number; amountPaise: number; paidAt: string }[];
+}

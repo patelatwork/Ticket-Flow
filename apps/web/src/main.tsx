@@ -5,12 +5,15 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { Layout, RequireAuth } from './components/Layout';
 import { ApiError } from './lib/api';
 import { AuthProvider } from './lib/auth';
+import { AttendeeDashboardPage } from './pages/AttendeeDashboardPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { EventDetailPage } from './pages/EventDetailPage';
 import { EventsPage } from './pages/EventsPage';
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage, RegisterPage } from './pages/AuthPages';
 import { MyBookingsPage } from './pages/MyBookingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { OrganizerDashboardPage } from './pages/OrganizerDashboardPage';
 import { OrganizerPage } from './pages/OrganizerPage';
 import './styles/index.css';
 
@@ -34,7 +37,8 @@ createRoot(root).render(
         <BrowserRouter>
           <Routes>
             <Route element={<Layout />}>
-              <Route index element={<EventsPage />} />
+              <Route index element={<LandingPage />} />
+              <Route path="events" element={<EventsPage />} />
               <Route path="events/:id" element={<EventDetailPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
@@ -43,6 +47,14 @@ createRoot(root).render(
                 element={
                   <RequireAuth>
                     <CheckoutPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="me"
+                element={
+                  <RequireAuth>
+                    <AttendeeDashboardPage />
                   </RequireAuth>
                 }
               />
@@ -56,6 +68,14 @@ createRoot(root).render(
               />
               <Route
                 path="organizer"
+                element={
+                  <RequireAuth roles={['organizer', 'admin']}>
+                    <OrganizerDashboardPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="organizer/events"
                 element={
                   <RequireAuth roles={['organizer', 'admin']}>
                     <OrganizerPage />

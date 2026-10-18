@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { LoginBodySchema, RegisterBodySchema } from '../auth/auth.schemas.js';
 import { CreateBookingBodySchema } from '../bookings/bookings.schemas.js';
 import { AddSeatsBodySchema, CreateEventBodySchema, ListEventsQuerySchema, UpdateEventBodySchema } from '../events/events.schemas.js';
+import { AnalyticsQuerySchema } from '../reports/reports.schemas.js';
 import { ListTicketsQuerySchema, VerifyTicketBodySchema } from '../tickets/tickets.schemas.js';
 
 /**
@@ -98,6 +99,7 @@ const ops: Record<string, Record<string, Op>> = {
   '/tickets/{id}/download': { get: { summary: 'Presigned PDF URL (owner only, short-lived)', tag: 'Tickets', params: ['id'], responses: { 200: '{ url, expiresAt }', 409: 'Not ready / void' } } },
   '/tickets/verify': { post: { summary: 'Gate check-in (exactly once)', tag: 'Tickets', body: VerifyTicketBodySchema, responses: { 200: 'Admitted', 409: 'Already used / void', 422: 'Forged token' } } },
   '/organizer/sales': { get: { summary: 'Sales summary + daily reports', tag: 'Organizer', responses: { 200: 'Summary' } } },
+  '/organizer/analytics': { get: { summary: 'Daily sales timeline, sales by tier, recent sales', tag: 'Organizer', query: AnalyticsQuerySchema, responses: { 200: 'Analytics' } } },
   '/admin/session': { post: { summary: 'Set the admin cookie for Bull Board', tag: 'Admin', responses: { 200: 'Cookie set' } } },
   '/admin/dlq': { get: { summary: 'Dead-lettered jobs', tag: 'Admin', responses: { 200: 'Jobs' } } },
   '/admin/dlq/{id}/retry': { post: { summary: 'Re-enqueue a dead-lettered job', tag: 'Admin', params: ['id'], responses: { 200: 'Requeued' } } },

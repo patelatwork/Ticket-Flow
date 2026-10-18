@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
+import { SubNav } from '../components/Layout';
 import { CreateEventForm } from '../components/organizer/CreateEventForm';
-import { SalesTable } from '../components/organizer/SalesTable';
 import { SeatLayoutForm } from '../components/organizer/SeatLayoutForm';
 import { Button, EmptyState, ErrorState, LoadingState, PageTitle, errorMessage } from '../components/ui';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/format';
+import { ORGANIZER_TABS } from '../lib/nav';
 import type { EventSummary } from '../lib/types';
 
 function DraftEvent({ event }: { event: EventSummary }) {
@@ -16,6 +17,7 @@ function DraftEvent({ event }: { event: EventSummary }) {
       void queryClient.invalidateQueries({ queryKey: ['my-events'] });
       void queryClient.invalidateQueries({ queryKey: ['events'] });
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
   return (
@@ -46,9 +48,10 @@ export function OrganizerPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle sub="Create an event, lay out its seats, publish it, and watch sales come in.">Your events</PageTitle>
-
-      <SalesTable />
+      <div>
+        <PageTitle sub="Create an event, lay out its seats, publish it, and watch sales come in.">Your events</PageTitle>
+        <SubNav label="Organizer" items={ORGANIZER_TABS} />
+      </div>
 
       <section aria-labelledby="events-heading" className="flex flex-col gap-2">
         <h2 id="events-heading" className="text-xl font-bold">

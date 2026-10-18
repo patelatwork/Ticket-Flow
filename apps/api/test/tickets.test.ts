@@ -178,3 +178,32 @@ describe('daily sales report', () => {
     expect(summary.body.daily[0]).toMatchObject({ reportDate: today, grossPaise: 2000 });
   });
 });
+
+describe('organizer analytics', () => {
+  it('zero-fills the timeline and counts sales per day, per tier, and in the recent feed', async () => {
+    const { bookingId, organizer, eventId } = await paidBooking(2);
+    await pool.query(
+      `INSERT INTO payments (booking_id, provider, provider_order_id, status, amount_paise, succeeded_at)
+       VALUES ($1, 'mock', 'order_a1', 'SUCCEEDED', 2000, now())`,
+      [bookingId],
+    );
+
+    const res = await request(url()).get('/organizer/analytics?days=7').set(organizer.auth);
+    expect(res.status).toBe(200);
+    expect(res.body.timeline).toHaveLength(7);
+    expect(res.body.timeline.at(-1)).toMatchObject({ date: new Date().toISOString().slice(0, 10), bookingsPaid: 1, ticketsSold: 2, grossPaise: 2000 });
+    expect(res.body.timeline[0]).toMatchObject({ bookingsPaid: 0, ticketsSold: 0, grossPaise: 0 });
+    expect(res.body.tiers).toEqual([{ tier: 'Standard', totalSeats: 2, seatsSold: 2, seatsHeld: 0, grossPaise: 2000 }]);
+    expect(res.body.recent).toEqual([expect.objectContaining({ bookingId, eventId, seats: 2, amountPaise: 2000 })]);
+
+    // Another organizer sees none of it; attendees are refused.
+    const other = await createUser('organizer');
+    const theirs = await request(url()).get('/organizer/analytics').set(other.auth);
+    expect(theirs.body.timeline).toHaveLength(30);
+    expect(theirs.body.tiers).toEqual([]);
+    expect(theirs.body.recent).toEqual([]);
+    const attendee = await createUser();
+    expect((await request(url()).get('/organizer/analytics').set(attendee.auth)).status).toBe(403);
+    expect((await request(url()).get('/organizer/analytics?days=500').set(organizer.auth)).status).toBe(400);
+  });
+});

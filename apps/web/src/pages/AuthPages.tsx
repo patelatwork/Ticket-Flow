@@ -67,7 +67,9 @@ export function RegisterPage() {
   const next = useNext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<SignupRole>('attendee');
+  const [params] = useSearchParams();
+  // "Sell tickets" links arrive with ?role=organizer preselected.
+  const [role, setRole] = useState<SignupRole>(params.get('role') === 'organizer' ? 'organizer' : 'attendee');
   const submit = useMutation({
     mutationFn: () => register(email, password, role),
     onSuccess: (user) => void navigate(user.role === 'organizer' ? '/organizer' : next, { replace: true }),

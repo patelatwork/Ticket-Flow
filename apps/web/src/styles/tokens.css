@@ -31,6 +31,7 @@
   --fs-xl: 1.625rem;
   --fs-2xl: 2.25rem;
   --fs-3xl: 3.25rem;
+  --fs-4xl: 4.5rem;          /* landing hero only */
 
   /* spacing: utilities are multiples of this (p-1 = 8px, p-2 = 16px, ...) */
   --space: 0.5rem;
@@ -48,6 +49,12 @@
   --measure: 40rem;
   --rule-width: 1px;
   --focus-width: 3px;
+
+  /* charts: bars never get thicker than --bar-max; the plot is --chart-h tall plus its axis band */
+  --chart-h: 12rem;
+  --bar-max: 1.5rem;
+  --meter-h: 1rem;
+  --mark-gap: 2px;
 }
 
 /* Narrow phones: a 10-seat row must fit in 375px without horizontal scrolling. */

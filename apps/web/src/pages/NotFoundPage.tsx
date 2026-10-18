@@ -6,7 +6,7 @@ export function NotFoundPage() {
     <EmptyState
       title="This page doesn’t exist"
       action={
-        <Link to="/" className="font-bold underline underline-offset-4">
+        <Link to="/events" className="font-bold underline underline-offset-4">
           Browse events
         </Link>
       }
